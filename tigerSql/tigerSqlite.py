@@ -3,6 +3,7 @@ import os
 import pickle
 import json
 import re
+#TODO: instead of manual 'text', 'int', use builtins i.e int, str, dict, str
 from abc import ABCMeta, abstractmethod
 class TableNotFoundError(Exception):
     def __init__(self, message):
@@ -13,7 +14,7 @@ class EmptyDictParamters(Exception):
 class DeletionWithEmptyParameters(Exception):
     def __init__(self, message):
         Exception.__init__(self, message)
-
+converter = {dict:'text', list:'text', str:'text', int:'int'} #default: 'text'
 def run_custom(initial):
     """`custom` WILL NOT JSONIFY INPUT IN ARGS"""
     def wrapper(cls, command,  *args):
@@ -175,5 +176,18 @@ class Sqlite(SQL):
             raise AttributeError("'get' method must begin with 'get_'")
         def wrapper(tablename):
             values = re.findall('[a-zA-Z]+', name[len('get_'):])
-            return list(sqlite3.connect(self.filename).cursor().execute('SELECT {} FROM {}'.format(', '.join(values), tablename)))
+            data = list(sqlite3.connect(self.filename).cursor().execute('SELECT {} FROM {}'.format(', '.join(values), tablename)))
+            final_data = []
+            for row in data:
+                s = []
+                for item in row:
+                    try:
+                        new_data = json.loads(item)
+                    except:
+                        s.append(item)
+                    else:
+                        s.append(new_data)
+                final_data.append(s)
+
+            return final_data
         return wrapper
