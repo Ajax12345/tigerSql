@@ -5,13 +5,16 @@ import json
 import re
 from abc import ABCMeta, abstractmethod
 class TableNotFoundError(Exception):
-    pass
+    def __init__(self, message):
+        Exception.__init__(self, message)
 class EmptyDictParamters(Exception):
-    pass
-
+    def __init__(self, message):
+        Exception.__init__(self, message)
+class DeletionWithEmptyParameters(Exception):
+    def __init__(self, message):
+        Exception.__init__(self, message)
 class SQL:
     __metaclass__ = ABCMeta
-    
 
     @abstractmethod
     def select(self, table, values = [], *args):
@@ -35,18 +38,18 @@ class SQL:
 
         """
 
+    @abstractmethod
+    def delete(self, tablname, *args):
+        """
+        removes the specified columns
+        db.delete('tablename', ('age', 17)]
+        """
+        pass
+
 class Sqlite(SQL):
     '''
     tigerSqlite3 provides an intuitive, Pythonic, sqlite3 wrapper
-    Example:
-    db = Sqlite('testdb.db')
-    db.create('testing_table', *[('name', 'text'), ('id', 'int'), ('age', 'int')])
-    db.insert('testing_table', *[('name', 'James'), ('id', 34324), ('age', 17)])
-    db.insert('testing_table', *[('name', {'first':'James', 'last':'Petullo'}), ('id', 40000), ('age', 18)])
-    db.update('testing_table', [('name', '!!!!')], [('age', 17)])
-    db.dbfile = "testing_table"
-    print db.dbfile
-    print db.get_name_id('testing_table')
+
     '''
     def __init__(self, filename):
         self.filename = filename
@@ -131,6 +134,17 @@ class Sqlite(SQL):
         conn.execute(command)
         conn.commit()
         conn.close()
+    def delete(self, tablename, *args):
+
+        if not args:
+            raise DeletionWithEmptyParameters('function parameter must include at least one deletion condition')
+        command = "DELETE FROM {} WHERE {}".format(tablename, ', '.join("{}=?".format(a) for a, b in args))
+        #print command
+        conn = sqlite3.connect(self.filename)
+        #print [json.dumps(b) if not isinstance(b, int) and not isinstance(b, str) else b for a, b in args]
+        conn.execute(command, [json.dumps(b) if not isinstance(b, int) and not isinstance(b, str) else b.decode('unicode-escape') if isinstance(b, str) else b for a, b in args])
+        conn.commit()
+        conn.close()
 
     def __iter__(self):
         for db_file in [i for i in os.listdir(os.getcwd()) if i.endswith('.txt')]:
@@ -144,8 +158,6 @@ class Sqlite(SQL):
             values = re.findall('[a-zA-Z]+', name[len('get_'):])
             return list(sqlite3.connect(self.filename).cursor().execute('SELECT {} FROM {}'.format(', '.join(values), tablename)))
         return wrapper
-
-
 
 
 
