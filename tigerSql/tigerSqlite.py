@@ -13,6 +13,26 @@ class EmptyDictParamters(Exception):
 class DeletionWithEmptyParameters(Exception):
     def __init__(self, message):
         Exception.__init__(self, message)
+
+def run_custom(initial):
+    """`custom` WILL NOT JSONIFY INPUT IN ARGS"""
+    def wrapper(cls, command,  *args):
+        new_command, args = initial(cls, command, *args)
+        if command.lower().startswith('select'):
+            if not args:
+                return list(sqlite3.connect(cls.filename).cursor().execute(command))
+            return list(sqlite3.connect(cls.filename).cursor().execute(command, args))
+        if not args:
+            conn = sqlite3.connect(cls.filename)
+            conn.execute(command)
+            conn.commit()
+            conn.close()
+        else:
+            conn = sqlite.connect(cls.filename)
+            conn.execute(command, args)
+            conn.commit()
+            conn.close()
+    return wrapper
 class SQL:
     __metaclass__ = ABCMeta
 
@@ -40,10 +60,7 @@ class SQL:
 
     @abstractmethod
     def delete(self, tablname, *args):
-        """
-        removes the specified columns
-        db.delete('tablename', ('age', 17)]
-        """
+        #removes the specified columns
         pass
 
 class Sqlite(SQL):
@@ -98,7 +115,9 @@ class Sqlite(SQL):
             yield current
         #return [[json.loads(b) if not isinstance(b, int) and not isinstance(b, str) else b for b in i] for i in sqlite3.connect(self.filename).cursor().execute(command)]
 
-
+    @run_custom
+    def custom(self, command, *args):
+        return command, args
 
     def insert(self, tablename, *args):
         if not args:
@@ -158,6 +177,3 @@ class Sqlite(SQL):
             values = re.findall('[a-zA-Z]+', name[len('get_'):])
             return list(sqlite3.connect(self.filename).cursor().execute('SELECT {} FROM {}'.format(', '.join(values), tablename)))
         return wrapper
-
-
-
