@@ -3,6 +3,9 @@ import os
 import pickle
 import json
 import re
+import datetime
+import sys
+import itertools
 #TODO: instead of manual 'text', 'int', use builtins i.e int, str, dict, str
 from abc import ABCMeta, abstractmethod
 class TableNotFoundError(Exception):
@@ -69,9 +72,10 @@ class Sqlite(SQL):
     tigerSqlite3 provides an intuitive, Pythonic, sqlite3 wrapper
 
     '''
-    def __init__(self, filename):
+    def __init__(self, filename, timestamp=True):
         self.filename = filename
         self.table_name = None
+        self.timestamp = timestamp
 
     @classmethod
     def select_all(cls, tablename, filename):
@@ -124,8 +128,10 @@ class Sqlite(SQL):
         if not args:
             raise  EmptyDictParamters("Parameters must not contain empty dictionaries")
 
-        command = 'INSERT INTO {} ({}) VALUES ({})'.format(tablename, ', '.join([a for a, b in args]), ', '.join(['?']*len(args)))
+        command = 'INSERT INTO {} ({}) VALUES ({})'.format(tablename, ', '.join(([a for a, b in args]+['timestamp']) if self.timestamp else [a for a, b in args]), ', '.join(['?']*len(args) if not self.timestamp else ['?']*(len(args)+1)))
         conn = sqlite3.connect(self.filename)
+        current_time = datetime.datetime.now()
+        args = list(args)+[('timestamp', '{}-{}-{}'.format(current_time.month, current_time.day, current_time.year))] if self.timestamp else args
         conn.execute(command, [json.dumps(b) if not isinstance(b, int) and not isinstance(b, float) else b for a, b in args])
         conn.commit()
         conn.close()
@@ -136,12 +142,14 @@ class Sqlite(SQL):
             raise  EmptyDictParamters("Parameters must not contain empty dictionaries")
 
         command = 'UPDATE {} SET {} WHERE {}'.format(tablename, ", ".join("{}=?".format(a) for a, b in targets), ", ".join("{}=?".format(a) for a, b in new_vals))
-
+        print("command", command)
         conn = sqlite3.connect(self.filename)
         #print [json.dumps(b) if not isinstance(b, int) else b for a, b in data1]+[json.dumps(b) if not isinstance(b, int) or not isinstance(b, float) else b for a, b in data2]
+
         conn.execute(command, [json.dumps(b) if not isinstance(b, int) else b for a, b in targets]+[json.dumps(b) if not isinstance(b, int) or not isinstance(b, float) else b for a, b in new_vals])
         conn.commit()
         conn.close()
+
 
 
     def create(self, tablename, *args):
@@ -155,13 +163,15 @@ class Sqlite(SQL):
         conn.commit()
         conn.close()
     def delete(self, tablename, *args):
-
+        print("deletion args", args)
         if not args:
             raise DeletionWithEmptyParameters('function parameter must include at least one deletion condition')
         command = "DELETE FROM {} WHERE {}".format(tablename, ', '.join("{}=?".format(a) for a, b in args))
-        #print command
+        print("deletion command", command)
+        print("deletion data results", [json.dumps(b) if not isinstance(b, int) and not isinstance(b, str) else b.decode('unicode-escape') if isinstance(b, str) else b for a, b in args])
         conn = sqlite3.connect(self.filename)
         #print [json.dumps(b) if not isinstance(b, int) and not isinstance(b, str) else b for a, b in args]
+
         conn.execute(command, [json.dumps(b) if not isinstance(b, int) and not isinstance(b, str) else b.decode('unicode-escape') if isinstance(b, str) else b for a, b in args])
         conn.commit()
         conn.close()
@@ -191,3 +201,115 @@ class Sqlite(SQL):
 
             return final_data
         return wrapper
+
+def verify_input_type(f):
+    def wrapper(cls, col, *args):
+        if not isinstance(col, int):
+            raise TypeError("Column values must be integers, not '{}'".format(type(col).__name__))
+        return f(cls, col, *args)
+    return wrapper
+
+class tigerSqliteTypeString:
+    @verify_input_type
+    def __init__(self, col_num):
+        self.rep = 'text'
+        self.col_num = col_num
+        self.default = None
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return "column {}:<{}: jsonified values of type '{}', default={}>".format(self.col_num, self.__class__.__name__, str.__name__, self.default, self.default)
+
+
+class tigerSqliteTypeInt:
+    @verify_input_type
+    def __init__(self, col_num):
+        self.col_num = col_num
+        self.rep = 'int'
+        self.default = None
+    def __repr__(self):
+        return str(self)
+    def __str__(self):
+        return "column {}:<{}: jsonified values of type '{}', default={}>".format(self.col_num, self.__class__.__name__, int.__name__, self.default)
+class tigerSqliteTypeBool:
+    @verify_input_type
+    def __init__(self, col_num):
+        self.col_num = col_num
+        self.rep = 'text'
+        self.default = None
+    def __repr__(self):
+        return str(self)
+    def __str__(self):
+        return "column {}:<{}: jsonified values of type '{}', default={}>".format(self.col_num, self.__class__.__name__, bool.__name__, self.default)
+
+class tigerSqliteTypeDict:
+    @verify_input_type
+    def __init__(self, col_num):
+        self.rep = 'text'
+        self.col_num = col_num
+        self.default = None
+    def __repr__(self):
+        return str(self)
+    def __str__(self):
+        return "column {}:<{}: jsonified values of type '{}', default={}>".format(self.col_num, self.__class__.__name__, dict.__name__, self.default)
+
+class tigerSqliteTypeList:
+    @verify_input_type
+    def __init__(self, col_num):
+        self.col_num = col_num
+        self.rep = 'text'
+        self.default = None
+    def __repr__(self):
+        return str(self)
+    def __str__(self):
+        return "column {}:<{}: jsonified values of type '{}', default={}>".format(self.col_num, self.__class__.__name__, list.__name__, self.default)
+class tigerSqliteTypeDefaultTimeStamp:
+    @verify_input_type
+    def __init__(self, col_num):
+        self.col_num = col_num
+        self.rep = 'text'
+        self.default = 'timestamp'
+    def __repr__(self):
+        return str(self)
+    def __str__(self):
+        return "column {}:<{}: jsonified values of type '{}', default={}>".format(self.col_num, self.__class__.__name__, str.__name__, self.default)
+
+class tigerSqliteTypeDefault:
+    @verify_input_type
+    def __init__(self, col_num, value):
+        self.col_num = col_num
+        self.value = value
+        self.rep = 'text'
+        self.default = value
+    def __repr__(self):
+        return str(self)
+    def __str__(self):
+        return "column {}:<{}: jsonified values of type '{}', default={}>".format(self.col_num, self.__class__.__name__, str.__name__, self.default)
+
+class Roar:
+    def create_table(self):
+
+        full_columns = sorted(self.__dict__.items(), key=lambda (x, y):y.col_num) if sys.version_info.major == 2 else sorted(self.__dict__.items(), key=lambda x:x[-1].col_num)
+        with open('tigerSqlite_db_config_{}.txt'.format(re.sub('\.db$', '', self.__filename__)), 'a') as f:
+            f.write('tablename: {}\n{}'.format(self.__tablename__, '\n'.join(str(b) for _, b in sorted(self.__dict__.items(), key=lambda x:x[-1].col_num))))
+        conn = sqlite3.connect(self.__filename__)
+        conn.execute('CREATE TABLE {} ({})'.format(self.__tablename__, ', '.join('{} {}'.format(a, b.rep) for a, b in sorted(self.__dict__.items(), key=lambda x:x[-1].col_num))))
+        conn.commit()
+        conn.close()
+class ParseLog:
+    def parse(self):
+        grouped_first = [list(b) for _, b in itertools.groupby([i.strip('\n') for i in open('tigerSqlite_db_config_{}.txt'.format(re.sub('\.db$', '', self.__filename__)))], key=lambda x:'tablename' in x)]
+        return {grouped_first[i][0].split(': ')[-1]:[re.findall("(?<=column\s)\d+|(?<=type\s')[a-zA-Z]+|(?<=default\=)[a-zA-Z]+", c) for c in grouped_first[i+1]] for i in range(0, len(grouped_first), 2)}
+
+
+class MyTable(Roar, ParseLog):
+    __tablename__ = 'MYTABLE'
+    __filename__ = 'testingtable4.db'
+    def __init__(self):
+        self.name = tigerSqliteTypeString(1)
+        self.age = tigerSqliteTypeInt(2)
+        self.timestamp = tigerSqliteTypeDefaultTimeStamp(3)
+
+if __name__ == '__main__':
+    MyTable().create_table()
