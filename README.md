@@ -14,3 +14,20 @@ print(current_info)
 ```
 [({'first':'James', 'last':'Petullo'}, 17)]
 ```
+
+## Table management and creation
+
+TigerSqlite supports custom table creation with raw type wrappers:
+
+```
+from tigerSqlite import Roar, ParseLog
+
+class MyTable(Roar, ParseLog):
+    __tablename__ = 'MYTABLE'
+    __filename__ = 'mytable.db'
+    def __init__(self):
+        self.name = tigerSqliteTypeString(1)
+        self.age = tigerSqliteTypeInt(2)
+        self.timestamp = tigerSqliteTypeDefaultTimeStamp(3)
+   
+```
