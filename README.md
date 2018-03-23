@@ -29,5 +29,9 @@ class MyTable(Roar, ParseLog):
         self.name = tigerSqliteTypeString(1)
         self.age = tigerSqliteTypeInt(2)
         self.timestamp = tigerSqliteTypeDefaultTimeStamp(3)
+        
+ if __name__ == "__main__":
+     MyTable().create_table()
    
 ```
+When run, a database file `mytable.db` will be created with a table named `MYTABLE` with columns `name, age, timestamp`.
